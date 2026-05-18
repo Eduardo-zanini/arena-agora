@@ -15,8 +15,13 @@ export default async function handler(req, res) {
       body: JSON.stringify(req.body),
     });
     const data = await response.json();
+    if (!response.ok) {
+      console.error("Anthropic error:", JSON.stringify(data));
+      return res.status(response.status).json(data);
+    }
     res.status(200).json(data);
   } catch (e) {
-    res.status(500).json({ error: "Erro ao chamar a API" });
+    console.error("Catch error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 }
