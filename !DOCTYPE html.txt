@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arena Ágora — Diário de Bordo</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0A0A14;min-height:100vh;font-family:system-ui,-apple-system,sans-serif}
+#root{min-height:100vh}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+// Storage compartilhado via KV simples em JSON no localStorage
+// Cada mentor salva localmente — para consolidar, usar o botão "Exportar dados"
+const DB={
+  get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
+  keys(){try{return Object.keys(localStorage).filter(k=>k.startsWith("diario:"))}catch{return[]}}
+};
+
+const Z={
+  orange:"#FF5B1F",orangeDim:"#FF5B1F22",mintDark:"#5DCAA5",mintDim:"#5DCAA520",
+  violetStrong:"#7B2FBE",violetDim:"#7B2FBE22",dark:"#0A0A14",darkCard:"#13131F",
+  darkBorder:"#2A2A3A",darkSurface:"#1C1C2C",grayMuted:"#555566",
+  textPrimary:"#F0EEE8",textSecondary:"#9999AA",
+};
+
+const GRUPOS={
+  G1:{nome:"Grupo 1 — MEC",mentor:"Gabriela Faula",coordenadores:["Leonardo Romeu","Keilla Moraes"],techLeads:["Ricardo Corrêa","Vinicius Cruvinel","Cláudio Payao","Christophe Desseaux"]},
+  G2:{nome:"Grupo 2 — TSE",mentor:"Patrícia Viana",coordenadores:["Rebeca Melo","Daniel Sousa","Thalita Souza"],techLeads:["Genisson Matos","Tiago Pereira","Ailson Gonçalves"]},
+  G3:{nome:"Grupo 3 — MTE",mentor:"Cris Kozovits",coordenadores:["Jovânia Souza","André Gadelha","Pedro Henrique"],techLeads:["Guilherme Banuth","Samuel Guimarães","Higor Fernando"]},
+  G4:{nome:"Grupo 4 — Min. Justiça",mentor:"Eduardo Zanini",coordenadores:["Flávia Guaraldo","Gabriel Ferreira","Anna Kelly","Stefânia Viana"],techLeads:["Fabrício Pires","Perycles Tupy"]},
+};
+
+const SPRINTS=["Sprint 1 — Entender","Sprint 2 — Estruturar","Sprint 3 — Decidir e Construir","Sprint 4 — Defender"];
+
+const CRITERIOS=[
+  {dim:"Leitura de contexto",key:"leitura_contexto",perguntas:["Profundidade no entendimento do Cidadão Digital?","Perguntas claras para aprofundamento?","Leitura do cenário do público?","Dados relevantes?"]},
+  {dim:"Pensamento estratégico",key:"pensamento_estrategico",perguntas:["Capacidade analítica consistente?","Identificou claramente o problema?","Priorizou o que importa?","Insights criativos?"]},
+  {dim:"Viabilidade",key:"viabilidade",perguntas:["Soluções escaláveis?","Como a solução resolve o problema?","Geração de valor?","Viabilidade econômica?"]},
+  {dim:"Governança e execução",key:"governanca",perguntas:["Plano de ação com qualidade?","Etapas de implantação claras?"]},
+  {dim:"Tomada de decisão",key:"decisao",perguntas:["Decidiu com critérios e dados?","Autonomia?"]},
+  {dim:"Comunicação e influência",key:"comunicacao",perguntas:["Clareza e objetividade?","Defendeu ideias com propriedade?"]},
+  {dim:"Liderança e colaboração",key:"colaboracao",perguntas:["Decisões colaborativas?","Todos participaram?"]},
+];
+
+const SC={"1":"#FF5B1F","2":"#E8A020","3":"#5DCAA5","4":"#7B2FBE"};
+const SL={"1":"Nulo","2":"Baixo","3":"Bom","4":"Ótimo"};
+
+const css=`
+.app{background:${Z.dark};min-height:100vh;color:${Z.textPrimary}}
+.topbar{background:${Z.darkCard};border-bottom:1px solid ${Z.darkBorder};padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.logo{font-size:14px;font-weight:700;color:${Z.orange}}
+.sub{font-size:11px;color:${Z.textSecondary};margin-top:1px}
+.body{padding:20px;max-width:700px;margin:0 auto}
+.lbl{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:${Z.textSecondary};margin:0 0 10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.chip{cursor:pointer;padding:10px 14px;border-radius:10px;border:1px solid ${Z.darkBorder};background:${Z.darkSurface};transition:all .15s}
+.chip:hover{border-color:${Z.grayMuted}}
+.ao{border:2px solid ${Z.orange}!important;background:${Z.orangeDim}!important}
+.am{border:2px solid ${Z.mintDark}!important;background:${Z.mintDim}!important}
+.av{border:2px solid ${Z.violetStrong}!important;background:${Z.violetDim}!important}
+.ct{font-size:13px;font-weight:500}
+.cs{font-size:11px;margin-top:2px}
+.btn{width:100%;padding:13px 0;border-radius:10px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-o{background:${Z.orange};color:#fff}
+.btn-o:disabled{opacity:.35;cursor:not-allowed}
+.btn-m{background:${Z.mintDark};color:#fff}
+.btn-g{background:none;border:1px solid ${Z.darkBorder};border-radius:8px;cursor:pointer;color:${Z.textSecondary};font-size:12px;padding:6px 14px}
+.card{background:${Z.darkCard};border:1px solid ${Z.darkBorder};border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.csurf{background:${Z.darkSurface};border:1px solid ${Z.darkBorder};border-radius:12px;padding:16px 18px;margin-bottom:12px}
+.tf{width:100%;font-size:13px;padding:12px 14px;border-radius:10px;border:1px solid ${Z.darkBorder};background:${Z.darkSurface};color:${Z.textPrimary};font-family:system-ui;line-height:1.7;outline:none;resize:vertical}
+.tf::placeholder{color:${Z.grayMuted}}
+.tf:focus{border-color:${Z.orange}55}
+.tfsm{min-height:52px;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:5px;background:${Z.darkSurface};color:${Z.textSecondary};border:1px solid ${Z.darkBorder};margin:2px}
+.prow{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid ${Z.darkBorder}20}
+.prow:last-child{border-bottom:none}
+.tog{width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;transition:background .2s;position:relative;flex-shrink:0}
+.togdot{width:14px;height:14px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:left .2s}
+.spinner{width:44px;height:44px;border-radius:50%;border:3px solid ${Z.darkBorder};border-top-color:${Z.orange};animation:spin 1s linear infinite;margin:0 auto 20px}
+.bwrap{height:4px;background:${Z.darkBorder};border-radius:4px;flex:1}
+.bfill{height:4px;border-radius:4px;transition:width .4s}
+.badge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500}
+.acl{width:3px;border-radius:2px;flex-shrink:0}
+.steps{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;background:${Z.darkCard};border-bottom:1px solid ${Z.darkBorder}}
+.sdot{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+.sline{width:20px;height:1.5px}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px}
+.sitem{display:flex;align-items:center;justify-content:space-between;background:${Z.darkSurface};border-radius:6px;padding:4px 8px}
+.mdots{display:flex;gap:3px}
+.mdot{width:10px;height:10px;border-radius:2px}
+.pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.pcrd{background:${Z.darkCard};border:1px solid ${Z.darkBorder};border-radius:12px;padding:14px}
+.prow2{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.plbl{font-size:10px;color:${Z.textSecondary};width:72px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbar{flex:1;height:5px;background:${Z.darkBorder};border-radius:3px;overflow:hidden}
+.pbf{height:100%;border-radius:3px;transition:width .4s}
+.pval{font-size:10px;font-weight:600;width:10px;text-align:right}
+.exparea{width:100%;min-height:200px;font-size:11px;padding:10px;border-radius:8px;border:1px solid ${Z.darkBorder};background:${Z.dark};color:${Z.textPrimary};font-family:monospace;line-height:1.6;resize:vertical}
+.navtabs{display:flex;gap:4px}
+.ntab{background:none;border:1px solid ${Z.darkBorder};border-radius:8px;cursor:pointer;color:${Z.textSecondary};font-size:12px;padding:6px 14px;transition:all .15s}
+.ntab.act{background:${Z.orange};border-color:${Z.orange};color:#fff;font-weight:500}
+@keyframes spin{to{transform:rotate(360deg)}}
+`;
+
+function Av({nome,role}){
+  const i=nome.split(" ").map(p=>p[0]).slice(0,2).join("");
+  const bg=role==="coord"?Z.orange:Z.violetStrong;
+  return <div style={{width:34,height:34,borderRadius:"50%",background:bg+"25",border:`1.5px solid ${bg}60`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:bg,flexShrink:0}}>{i}</div>;
+}
+
+function Tog({on,onChange}){
+  return <button className="tog" onClick={()=>onChange(!on)} style={{background:on?Z.mintDark:Z.grayMuted}}><div className="togdot" style={{left:on?18:4}}/></button>;
+}
+
+function SBadge({v}){
+  if(!v||v==="—") return <span style={{color:Z.grayMuted,fontSize:12}}>—</span>;
+  return <span className="badge" style={{background:SC[v]+"25",color:SC[v],border:`1px solid ${SC[v]}44`}}>{v} · {SL[v]}</span>;
+}
+
+function MDots({v}){
+  const n=parseInt(v)||0;
+  return <div className="mdots">{[1,2,3,4].map(i=><div key={i} className="mdot" style={{background:i<=n?SC[String(i)]:Z.darkBorder}}/>)}</div>;
+}
+
+function Steps({steps,cur}){
+  const idx=steps.indexOf(cur);
+  return(
+    <div className="steps">
+      {steps.map((s,i)=>(
+        <div key={s} style={{display:"flex",alignItems:"center",gap:6}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+            <div className="sdot" style={{background:i<idx?Z.mintDark:i===idx?Z.orange:Z.darkBorder,color:i<=idx?"#fff":Z.grayMuted}}>{i<idx?"✓":i+1}</div>
+            <span style={{fontSize:9,color:i===idx?Z.textPrimary:Z.grayMuted,fontWeight:i===idx?500:400,whiteSpace:"nowrap"}}>{s}</span>
+          </div>
+          {i<steps.length-1&&<div className="sline" style={{background:i<idx?Z.mintDark:Z.darkBorder,marginBottom:14}}/>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── PAINEL ──────────────────────────────────────────────────────────
+function Painel(){
+  const [dados,setDados]=useState({});
+  const [si,setSi]=useState(0);
+
+  useEffect(()=>{
+    const r={};
+    DB.keys().forEach(k=>{const v=DB.get(k);if(v)r[k.replace("diario:","")]=v;});
+    setDados(r);
+  },[]);
+
+  function media(g,s){
+    const d=dados[`${g}:s${s}`];
+    if(!d?.coletivo) return null;
+    const vals=Object.values(d.coletivo).map(c=>parseInt(c.score)||0).filter(v=>v>0);
+    if(!vals.length) return null;
+    return(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+  }
+
+  return(
+    <div className="body">
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div className="acl" style={{height:14,background:Z.mintDark}}/>
+          <span style={{fontSize:15,fontWeight:500}}>Painel Consolidado</span>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {SPRINTS.map((s,i)=>(
+            <button key={i} onClick={()=>setSi(i)} className="btn-g" style={{background:si===i?Z.orange:"none",borderColor:si===i?Z.orange:Z.darkBorder,color:si===i?"#fff":Z.textSecondary,fontSize:11,padding:"5px 10px"}}>S{i+1}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pgrid">
+        {Object.keys(GRUPOS).map(g=>{
+          const d=dados[`${g}:s${si}`];
+          const m=media(g,si);
+          return(
+            <div key={g} className="pcrd">
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:13,fontWeight:600,color:Z.orange}}>{g}</span>
+                {m&&<span style={{fontSize:13,fontWeight:700,color:SC[String(Math.round(parseFloat(m)))]||Z.textSecondary}}>{m}</span>}
+              </div>
+              <p style={{fontSize:10,color:Z.textSecondary,marginBottom:8}}>{GRUPOS[g].nome.split("—")[1].trim()}</p>
+              {d?(
+                <div style={{marginTop:6}}>
+                  {CRITERIOS.map(b=>{
+                    const s=d.coletivo?.[b.key]?.score;
+                    const n=parseInt(s)||0;
+                    return(
+                      <div key={b.key} className="prow2">
+                        <span className="plbl">{b.dim}</span>
+                        <div className="pbar"><div className="pbf" style={{width:(n/4*100)+"%",background:SC[s]||Z.darkBorder}}/></div>
+                        <span className="pval" style={{color:SC[s]||Z.grayMuted}}>{s||"—"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ):(
+                <p style={{fontSize:11,color:Z.grayMuted,textAlign:"center",padding:"12px 0"}}>Sem dados</p>
+              )}
+              <p style={{fontSize:10,color:Z.grayMuted,marginTop:8}}>{GRUPOS[g].mentor}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div className="acl" style={{height:14,background:Z.violetStrong}}/>
+        <span className="lbl" style={{margin:0}}>Comparativo por dimensão — {SPRINTS[si].split("—")[0]}</span>
+      </div>
+      <div className="card">
+        {CRITERIOS.map(b=>(
+          <div key={b.key} style={{marginBottom:14}}>
+            <p style={{fontSize:12,color:Z.textPrimary,marginBottom:6,fontWeight:500}}>{b.dim}</p>
+            <div style={{display:"flex",gap:8}}>
+              {Object.keys(GRUPOS).map(g=>{
+                const d=dados[`${g}:s${si}`];
+                const s=d?.coletivo?.[b.key]?.score;
+                const n=parseInt(s)||0;
+                return(
+                  <div key={g} style={{flex:1}}>
+                    <div style={{height:28,background:Z.darkSurface,borderRadius:6,display:"flex",alignItems:"flex-end",overflow:"hidden"}}>
+                      <div style={{width:"100%",height:(n/4*100)+"%",background:SC[s]||Z.darkBorder,transition:"height .4s",minHeight:n>0?4:0}}/>
+                    </div>
+                    <p style={{fontSize:10,color:Z.textSecondary,textAlign:"center",marginTop:3}}>{g}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── DIÁRIO ──────────────────────────────────────────────────────────
+function Diario(){
+  const [step,setStep]=useState("config");
+  const [grupo,setGrupo]=useState("G4");
+  const [si,setSi]=useState(0);
+  const [tipo,setTipo]=useState("board");
+  const [trans,setTrans]=useState("");
+  const [pres,setPres]=useState({});
+  const [anot,setAnot]=useState({});
+  const [res,setRes]=useState(null);
+  const [loadMsg,setLoadMsg]=useState("");
+  const [obs,setObs]=useState("");
+  const [showExp,setShowExp]=useState(false);
+  const [expTxt,setExpTxt]=useState("");
+  const [salvo,setSalvo]=useState(false);
+
+  const g=GRUPOS[grupo];
+  const todos=[...g.coordenadores,...g.techLeads];
+  const presentes=todos.filter(n=>pres[n]!==false);
+  const podeAn=presentes.length>0&&(trans.trim().length>30||Object.values(anot).some(v=>v.trim().length>5));
+
+  function reset(){setStep("config");setRes(null);setTrans("");setObs("");setPres({});setAnot({});setShowExp(false);}
+
+  async function analisar(){
+    setStep("analisando");
+    const msgs=["Lendo a transcrição...","Cruzando com anotações manuais...","Avaliando competências...","Análise coletiva...","Gerando diário..."];
+    let i=0;setLoadMsg(msgs[0]);
+    const iv=setInterval(()=>{i++;if(i<msgs.length)setLoadMsg(msgs[i]);},2200);
+    const aCtx=Object.entries(anot).filter(([,v])=>v.trim()).map(([n,v])=>`- ${n}: ${v}`).join("\n");
+    const ausentes=todos.filter(n=>pres[n]===false).join(", ");
+    const prompt=`Você é avaliador especialista em desenvolvimento de liderança analisando ${tipo==="board"?"Mentoria com o Board":"Encontro DHO"} — Arena Ágora (${SPRINTS[si]}).
+Grupo: ${g.nome}
+Coordenadores: ${g.coordenadores.join(", ")}
+Tech Leads: ${g.techLeads.join(", ")}
+${ausentes?`Ausentes: ${ausentes}`:"Todos presentes"}
+ANOTAÇÕES MANUAIS:
+${aCtx||"Nenhuma."}
+TRANSCRIÇÃO:
+${trans||"(sem transcrição)"}
+Gere JSON:
+{"resumo":"2-3 linhas","destaques":["f1","f2","f3"],"atencao":["a1","a2"],"individuais":{"NOME":{"score_competencias":{"leitura_contexto":"3","pensamento_estrategico":"3","viabilidade":"2","governanca":"3","decisao":"3","comunicacao":"3","lideranca":"3"},"obs":"obs 2 linhas"}},"coletivo":{"leitura_contexto":{"score":"3","obs":""},"pensamento_estrategico":{"score":"3","obs":""},"viabilidade":{"score":"2","obs":""},"governanca":{"score":"2","obs":""},"decisao":{"score":"3","obs":""},"comunicacao":{"score":"3","obs":""},"colaboracao":{"score":"3","obs":""}}}
+1=Nulo 2=Baixo 3=Bom 4=Ótimo. Avalie apenas presentes. Nomes exatos. APENAS JSON.`;
+
+    try{
+      const r=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]}),
+      });
+      const data=await r.json();
+      clearInterval(iv);
+      const txt=data.content?.map(b=>b.text||"").join("")||"";
+      const parsed=JSON.parse(txt.replace(/```json|```/g,"").trim());
+      setRes(parsed);setStep("resultado");
+    }catch(e){clearInterval(iv);setRes({erro:true});setStep("resultado");}
+  }
+
+  function salvar(){
+    if(!res) return;
+    DB.set(`diario:${grupo}:s${si}`,{...res,grupo,sprint:si,tipo,obs,ts:Date.now()});
+    setSalvo(true);setTimeout(()=>setSalvo(false),3000);
+  }
+
+  function gerarExp(){
+    if(!res) return;
+    const linhas=[
+      `DIÁRIO DE BORDO — ARENA ÁGORA`,
+      `${g.nome} | ${SPRINTS[si]} | ${tipo==="board"?"Mentoria Board":"Encontro DHO"}`,
+      new Date().toLocaleDateString("pt-BR"),"",
+      "=== RESUMO ===",res.resumo||"","",
+      "DESTAQUES:",...(res.destaques||[]).map(d=>"+ "+d),"",
+      "PONTOS DE ATENÇÃO:",...(res.atencao||[]).map(a=>"! "+a),"",
+      "=== AVALIAÇÃO INDIVIDUAL ===",
+      ...Object.entries(res.individuais||{}).flatMap(([n,d])=>[`\n${n}`,"Obs: "+(d.obs||""),...Object.entries(d.score_competencias||{}).map(([k,v])=>`  ${k}: ${v}`)]),
+      "","=== AVALIAÇÃO COLETIVA ===",
+      ...CRITERIOS.map(b=>`${b.dim}: ${res.coletivo?.[b.key]?.score||"—"} | ${res.coletivo?.[b.key]?.obs||""}`),
+      "",obs?"OBSERVAÇÕES DO MENTOR:\n"+obs:"",
+    ];
+    setExpTxt(linhas.join("\n"));setShowExp(true);
+  }
+
+  if(step==="config") return(<>
+    <div className="topbar">
+      <div><div className="logo">Arena Ágora</div><div className="sub">Novo Diário de Bordo</div></div>
+    </div>
+    <div className="body">
+      <p className="lbl">Grupo</p>
+      <div className="g2">
+        {Object.entries(GRUPOS).map(([k,gr])=>(
+          <div key={k} className={`chip ${grupo===k?"ao":""}`} onClick={()=>setGrupo(k)}>
+            <div className="ct" style={{color:grupo===k?Z.orange:Z.textPrimary}}>{k} — {gr.nome.split("—")[1].trim()}</div>
+            <div className="cs" style={{color:grupo===k?Z.orange:Z.textSecondary}}>{gr.mentor}</div>
+          </div>
+        ))}
+      </div>
+      <p className="lbl">Sprint</p>
+      <div className="g2">
+        {SPRINTS.map((s,i)=>(
+          <div key={i} className={`chip ${si===i?"am":""}`} onClick={()=>setSi(i)}>
+            <div className="ct" style={{color:si===i?Z.mintDark:Z.textPrimary,fontSize:12}}>{s}</div>
+          </div>
+        ))}
+      </div>
+      <p className="lbl">Tipo de reunião</p>
+      <div className="g2" style={{marginBottom:24}}>
+        {[["board","Mentoria com o Board"],["dho","Encontro DHO"]].map(([v,l])=>(
+          <div key={v} className={`chip ${tipo===v?(v==="board"?"ao":"av"):""}`} onClick={()=>setTipo(v)}>
+            <div className="ct" style={{color:tipo===v?(v==="board"?Z.orange:Z.violetStrong):Z.textPrimary}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <button className="btn btn-o" onClick={()=>setStep("presenca")}>Próximo — confirmar presença →</button>
+    </div>
+  </>);
+
+  if(step==="presenca") return(<>
+    <div className="topbar">
+      <div><div className="logo">Arena Ágora</div><div className="sub">{g.nome.split("—")[1].trim()} · {SPRINTS[si].split("—")[0]}</div></div>
+      <button className="btn-g" onClick={()=>setStep("config")}>← voltar</button>
+    </div>
+    <Steps steps={["Config","Presença","Transcrição"]} cur="Presença"/>
+    <div className="body">
+      <div className="csurf" style={{marginBottom:16}}>
+        <p style={{fontSize:13,fontWeight:500,marginBottom:4}}>Quem estava presente?</p>
+        <p style={{fontSize:12,color:Z.textSecondary}}>Desative ausentes. Adicione anotações para a IA usar mesmo sem transcrição.</p>
+      </div>
+      {[["Coordenadores",g.coordenadores,"coord"],["Tech Leads",g.techLeads,"tech"]].map(([lbl,lista,role])=>(
+        <div key={lbl}>
+          <p className="lbl">{lbl}</p>
+          <div className="card" style={{marginBottom:16}}>
+            {lista.map(nome=>(
+              <div key={nome} className="prow">
+                <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
+                  <Av nome={nome} role={role}/>
+                  <span style={{fontSize:13,color:pres[nome]===false?Z.grayMuted:Z.textPrimary}}>{nome}</span>
+                  {pres[nome]===false&&<span className="tag">ausente</span>}
+                </div>
+                <Tog on={pres[nome]!==false} onChange={()=>setPres(p=>({...p,[nome]:!p[nome]}))}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className="lbl" style={{marginTop:8}}>Anotações por pessoa</p>
+      <p style={{fontSize:12,color:Z.textSecondary,marginBottom:12}}>O que você observou presencialmente sobre cada um.</p>
+      {presentes.map(nome=>(
+        <div key={nome} style={{marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+            <Av nome={nome} role={g.coordenadores.includes(nome)?"coord":"tech"}/>
+            <span style={{fontSize:13,fontWeight:500}}>{nome}</span>
+          </div>
+          <textarea className="tf tfsm" value={anot[nome]||""} onChange={e=>setAnot(a=>({...a,[nome]:e.target.value}))}
+            placeholder={`Postura, perguntas, engajamento de ${nome.split(" ")[0]}...`}/>
+        </div>
+      ))}
+      <div style={{height:16}}/>
+      <button className="btn btn-o" onClick={()=>setStep("transcricao")}>Próximo — transcrição →</button>
+    </div>
+  </>);
+
+  if(step==="transcricao") return(<>
+    <div className="topbar">
+      <div><div className="logo">Arena Ágora</div><div className="sub">{g.nome.split("—")[1].trim()} · {SPRINTS[si].split("—")[0]}</div></div>
+      <button className="btn-g" onClick={()=>setStep("presenca")}>← voltar</button>
+    </div>
+    <Steps steps={["Config","Presença","Transcrição"]} cur="Transcrição"/>
+    <div className="body">
+      <div className="csurf" style={{marginBottom:16}}>
+        <p style={{fontSize:13,fontWeight:500,marginBottom:4}}>Transcrição da reunião</p>
+        <p style={{fontSize:12,color:Z.textSecondary}}>Opcional se já preencheu as anotações. Cole a transcrição do Meet para análise mais rica.</p>
+      </div>
+      <textarea className="tf" value={trans} onChange={e=>setTrans(e.target.value)}
+        placeholder="Cole a transcrição do Google Meet, ata ou qualquer registro..." style={{minHeight:180,marginBottom:6}}/>
+      <p style={{fontSize:11,color:Z.grayMuted,marginBottom:20}}>
+        {trans.trim().length>0?`${trans.split(/\s+/).filter(Boolean).length} palavras`:"opcional — anotações manuais já são suficientes"}
+      </p>
+      <div className="card" style={{marginBottom:20}}>
+        <p style={{fontSize:12,fontWeight:500,marginBottom:8}}>O que será analisado</p>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          <span className="tag">{presentes.length} presentes</span>
+          {todos.filter(n=>pres[n]===false).length>0&&<span className="tag" style={{color:Z.orange}}>{todos.filter(n=>pres[n]===false).length} ausentes</span>}
+          <span className="tag">{Object.values(anot).filter(v=>v.trim()).length} anotações</span>
+          {trans.trim().length>0&&<span className="tag" style={{color:Z.mintDark}}>+ transcrição</span>}
+        </div>
+      </div>
+      <button className="btn btn-o" onClick={analisar} disabled={!podeAn}>Analisar com IA →</button>
+    </div>
+  </>);
+
+  if(step==="analisando") return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"60px 20px",textAlign:"center"}}>
+      <div className="spinner"/>
+      <p style={{fontSize:15,fontWeight:500,marginBottom:6}}>{loadMsg}</p>
+      <p style={{fontSize:12,color:Z.textSecondary,marginBottom:32}}>Cruzando transcrição com anotações manuais...</p>
+      <div style={{display:"flex",gap:6}}>
+        {CRITERIOS.map((b,i)=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:i%3===0?Z.orange:i%3===1?Z.mintDark:Z.violetStrong,opacity:.5}}/>)}
+      </div>
+    </div>
+  );
+
+  if(step==="resultado"&&res?.erro) return(<>
+    <div className="topbar"><div><div className="logo">Arena Ágora</div></div></div>
+    <div className="body" style={{textAlign:"center",padding:"60px 20px"}}>
+      <p style={{color:Z.orange,fontWeight:500,marginBottom:16}}>Não foi possível processar. Verifique o conteúdo.</p>
+      <button className="btn-g" onClick={()=>setStep("transcricao")}>← Tentar novamente</button>
+    </div>
+  </>);
+
+  if(step==="resultado"&&res) return(<>
+    <div className="topbar">
+      <div><div className="logo">Arena Ágora</div><div className="sub">{g.nome.split("—")[1].trim()} · {SPRINTS[si].split("—")[0]} · {tipo==="board"?"Board":"DHO"}</div></div>
+      <button className="btn-g" onClick={reset}>Nova análise</button>
+    </div>
+    <div className="body">
+      <div style={{display:"flex",gap:10,marginBottom:16}}>
+        <button className="btn btn-m" style={{flex:1,padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo no painel!":"Salvar no painel"}</button>
+        <button className="btn" style={{flex:1,padding:"11px 0",fontSize:13,background:Z.darkSurface,color:Z.textPrimary,border:`1px solid ${Z.darkBorder}`}} onClick={gerarExp}>Gerar relatório</button>
+      </div>
+      {salvo&&<div style={{background:Z.mintDark+"22",border:`1px solid ${Z.mintDark}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:Z.mintDark}}>✓ Dados salvos! Visíveis no painel consolidado.</div>}
+
+      <div style={{background:`linear-gradient(135deg,${Z.darkCard} 0%,#1a1030 100%)`,border:`1px solid ${Z.violetStrong}40`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+          <div className="acl" style={{height:14,background:Z.orange}}/>
+          <span style={{fontSize:10,fontWeight:600,letterSpacing:1.5,textTransform:"uppercase",color:Z.mintDark}}>Resumo geral</span>
+        </div>
+        <p style={{fontSize:13,color:Z.textPrimary,marginBottom:14,lineHeight:1.75}}>{res.resumo}</p>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <p style={{fontSize:10,fontWeight:600,color:Z.mintDark,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Destaques</p>
+            {(res.destaques||[]).map((d,i)=><p key={i} style={{fontSize:12,color:"#aaa",marginBottom:4}}>+ {d}</p>)}
+          </div>
+          <div>
+            <p style={{fontSize:10,fontWeight:600,color:Z.orange,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Atenção</p>
+            {(res.atencao||[]).map((a,i)=><p key={i} style={{fontSize:12,color:"#aaa",marginBottom:4}}>! {a}</p>)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 12px"}}>
+        <div className="acl" style={{height:14,background:Z.orange}}/><p className="lbl" style={{margin:0}}>Avaliação individual</p>
+      </div>
+      {Object.entries(res.individuais||{}).map(([nome,dados])=>{
+        const isC=g.coordenadores.includes(nome);
+        const sc=dados.score_competencias||{};
+        const lb={leitura_contexto:"Leitura",pensamento_estrategico:"Estratégia",viabilidade:"Viabilidade",governanca:"Governança",decisao:"Decisão",comunicacao:"Comunicação",lideranca:"Liderança"};
+        return(
+          <div key={nome} className="card">
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <Av nome={nome} role={isC?"coord":"tech"}/>
+              <div style={{flex:1}}>
+                <p style={{fontWeight:500,fontSize:13}}>{nome}</p>
+                <p style={{fontSize:11,color:Z.textSecondary}}>{isC?"Coordenador(a)":"Tech Lead"}</p>
+              </div>
+            </div>
+            <div className="sgrid">
+              {Object.entries(sc).map(([k,v])=>v&&v!=="—"?(
+                <div key={k} className="sitem">
+                  <span style={{fontSize:11,color:Z.textSecondary}}>{lb[k]||k}</span>
+                  <MDots v={v}/>
+                </div>
+              ):null)}
+            </div>
+            <textarea className="tf tfsm" defaultValue={dados.obs} placeholder="Editar observação..."/>
+          </div>
+        );
+      })}
+
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 12px"}}>
+        <div className="acl" style={{height:14,background:Z.mintDark}}/><p className="lbl" style={{margin:0}}>Avaliação coletiva — lente board</p>
+      </div>
+      {CRITERIOS.map(b=>{
+        const col=res.coletivo?.[b.key]||{};
+        const n=parseInt(col.score)||0;
+        const cor=SC[col.score]||Z.darkBorder;
+        return(
+          <div key={b.key} className="card">
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <p style={{fontWeight:500,fontSize:13}}>{b.dim}</p>
+              <SBadge v={col.score}/>
+            </div>
+            <div className="bwrap" style={{marginBottom:8}}><div className="bfill" style={{width:(n/4*100)+"%",background:cor}}/></div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+              {b.perguntas.map((p,i)=><span key={i} className="tag">{p}</span>)}
+            </div>
+            <textarea className="tf tfsm" defaultValue={col.obs} placeholder="Adicionar observação..."/>
+          </div>
+        );
+      })}
+
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 10px"}}>
+        <div className="acl" style={{height:14,background:Z.violetStrong}}/><p className="lbl" style={{margin:0}}>Observações do mentor</p>
+      </div>
+      <textarea className="tf" value={obs} onChange={e=>setObs(e.target.value)}
+        placeholder="Percepções adicionais, alertas, próximos passos..." style={{minHeight:80,marginBottom:16}}/>
+
+      {showExp&&(
+        <div style={{background:Z.darkSurface,border:`1px solid ${Z.mintDark}55`,borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <p style={{fontSize:12,fontWeight:500,color:Z.mintDark}}>Clique na área → Ctrl+A → Ctrl+C</p>
+            <button className="btn-g" onClick={()=>setShowExp(false)} style={{fontSize:11,padding:"4px 10px"}}>fechar</button>
+          </div>
+          <textarea className="exparea" readOnly value={expTxt} onClick={e=>e.target.select()}/>
+        </div>
+      )}
+      <div style={{height:24}}/>
+    </div>
+  </>);
+
+  return null;
+}
+
+// ── ROOT ─────────────────────────────────────────────────────────────
+function App(){
+  const [tab,setTab]=useState("diario");
+  return(
+    <div className="app">
+      <style>{css}</style>
+      {tab==="painel"?(
+        <>
+          <div className="topbar">
+            <div><div className="logo">Arena Ágora</div><div className="sub">Diário de Bordo DHO</div></div>
+            <div className="navtabs">
+              <button className={`ntab ${tab==="diario"?"act":""}`} onClick={()=>setTab("diario")}>Diário</button>
+              <button className={`ntab ${tab==="painel"?"act":""}`} onClick={()=>setTab("painel")}>Painel</button>
+            </div>
+          </div>
+          <Painel/>
+        </>
+      ):(
+        <div style={{position:"relative"}}>
+          <div style={{position:"fixed",top:12,right:20,zIndex:100}}>
+            <div className="navtabs">
+              <button className={`ntab ${tab==="diario"?"act":""}`} onClick={()=>setTab("diario")}>Diário</button>
+              <button className={`ntab ${tab==="painel"?"act":""}`} onClick={()=>setTab("painel")}>Painel</button>
+            </div>
+          </div>
+          <Diario/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
