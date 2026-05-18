@@ -18,8 +18,6 @@ html,body{background:#0A0A14;min-height:100vh;font-family:system-ui,-apple-syste
 <script type="text/babel">
 const {useState,useEffect}=React;
 
-// Storage compartilhado via KV simples em JSON no localStorage
-// Cada mentor salva localmente — para consolidar, usar o botão "Exportar dados"
 const DB={
   get(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}},
@@ -149,17 +147,14 @@ function Steps({steps,cur}){
   );
 }
 
-// ── PAINEL ──────────────────────────────────────────────────────────
 function Painel(){
   const [dados,setDados]=useState({});
   const [si,setSi]=useState(0);
-
   useEffect(()=>{
     const r={};
     DB.keys().forEach(k=>{const v=DB.get(k);if(v)r[k.replace("diario:","")]=v;});
     setDados(r);
   },[]);
-
   function media(g,s){
     const d=dados[`${g}:s${s}`];
     if(!d?.coletivo) return null;
@@ -167,7 +162,6 @@ function Painel(){
     if(!vals.length) return null;
     return(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
   }
-
   return(
     <div className="body">
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
@@ -181,7 +175,6 @@ function Painel(){
           ))}
         </div>
       </div>
-
       <div className="pgrid">
         {Object.keys(GRUPOS).map(g=>{
           const d=dados[`${g}:s${si}`];
@@ -215,7 +208,6 @@ function Painel(){
           );
         })}
       </div>
-
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
         <div className="acl" style={{height:14,background:Z.violetStrong}}/>
         <span className="lbl" style={{margin:0}}>Comparativo por dimensão — {SPRINTS[si].split("—")[0]}</span>
@@ -246,7 +238,6 @@ function Painel(){
   );
 }
 
-// ── DIÁRIO ──────────────────────────────────────────────────────────
 function Diario(){
   const [step,setStep]=useState("config");
   const [grupo,setGrupo]=useState("G4");
@@ -290,9 +281,9 @@ Gere JSON:
 1=Nulo 2=Baixo 3=Bom 4=Ótimo. Avalie apenas presentes. Nomes exatos. APENAS JSON.`;
 
     try{
-      const r=await fetch("https://api.anthropic.com/v1/messages",{
+      const r=await fetch("/api/chat",{
         method:"POST",
-        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+        headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]}),
       });
       const data=await r.json();
@@ -461,11 +452,10 @@ Gere JSON:
     </div>
     <div className="body">
       <div style={{display:"flex",gap:10,marginBottom:16}}>
-        <button className="btn btn-m" style={{flex:1,padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo no painel!":"Salvar no painel"}</button>
+        <button className="btn btn-m" style={{flex:1,padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo!":"Salvar no painel"}</button>
         <button className="btn" style={{flex:1,padding:"11px 0",fontSize:13,background:Z.darkSurface,color:Z.textPrimary,border:`1px solid ${Z.darkBorder}`}} onClick={gerarExp}>Gerar relatório</button>
       </div>
-      {salvo&&<div style={{background:Z.mintDark+"22",border:`1px solid ${Z.mintDark}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:Z.mintDark}}>✓ Dados salvos! Visíveis no painel consolidado.</div>}
-
+      {salvo&&<div style={{background:Z.mintDark+"22",border:`1px solid ${Z.mintDark}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:Z.mintDark}}>✓ Dados salvos no painel consolidado.</div>}
       <div style={{background:`linear-gradient(135deg,${Z.darkCard} 0%,#1a1030 100%)`,border:`1px solid ${Z.violetStrong}40`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
           <div className="acl" style={{height:14,background:Z.orange}}/>
@@ -483,7 +473,6 @@ Gere JSON:
           </div>
         </div>
       </div>
-
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 12px"}}>
         <div className="acl" style={{height:14,background:Z.orange}}/><p className="lbl" style={{margin:0}}>Avaliação individual</p>
       </div>
@@ -512,7 +501,6 @@ Gere JSON:
           </div>
         );
       })}
-
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 12px"}}>
         <div className="acl" style={{height:14,background:Z.mintDark}}/><p className="lbl" style={{margin:0}}>Avaliação coletiva — lente board</p>
       </div>
@@ -534,13 +522,11 @@ Gere JSON:
           </div>
         );
       })}
-
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 10px"}}>
         <div className="acl" style={{height:14,background:Z.violetStrong}}/><p className="lbl" style={{margin:0}}>Observações do mentor</p>
       </div>
       <textarea className="tf" value={obs} onChange={e=>setObs(e.target.value)}
         placeholder="Percepções adicionais, alertas, próximos passos..." style={{minHeight:80,marginBottom:16}}/>
-
       {showExp&&(
         <div style={{background:Z.darkSurface,border:`1px solid ${Z.mintDark}55`,borderRadius:12,padding:16,marginBottom:16}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -553,11 +539,9 @@ Gere JSON:
       <div style={{height:24}}/>
     </div>
   </>);
-
   return null;
 }
 
-// ── ROOT ─────────────────────────────────────────────────────────────
 function App(){
   const [tab,setTab]=useState("diario");
   return(
