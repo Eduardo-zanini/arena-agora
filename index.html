@@ -50,6 +50,64 @@ const CRITERIOS=[
   {dim:"Liderança e colaboração",key:"colaboracao",perguntas:["Decisões colaborativas?","Todos participaram?"]},
 ];
 
+const CRITERIOS_DHO_COORD=[
+  {key:"presenca",dim:"Presença",pergunta:"Esteve presente no encontro do grupo de trabalho?"},
+  {key:"participacao",dim:"Participação",pergunta:"Participou ativamente?"},
+  {key:"papel",dim:"Papel",pergunta:"Assumiu papel claro no grupo?"},
+  {key:"entregas",dim:"Entregas",pergunta:"Cumpriu suas entregas individuais no prazo?"},
+  {key:"colaboracao_dho",dim:"Colaboração",pergunta:"Colaborou com ideias e análises nas discussões?"},
+];
+
+const CRITERIOS_DHO_TECH=[
+  ...CRITERIOS_DHO_COORD,
+  {key:"comunicacao_dho",dim:"Comunicação",pergunta:"Praticou uma comunicação empática e uma escuta ativa?"},
+];
+
+const COLETIVA_DHO_SPRINTS=[
+  {titulo:"Sprint 1 — Entender",perguntas:[
+    {key:"s1_papeis",p:"Definiu papéis e responsabilidades claros?"},
+    {key:"s1_planejamento",p:"Apresentou planejamento e fluxo de atividades?"},
+    {key:"s1_ritos",p:"Estabeleceu ritos de trabalho?"},
+    {key:"s1_mapa",p:"Desenvolveram um mapa de entendimento do cenário?"},
+    {key:"s1_foco",p:"Mantiveram o foco na SPRINT de entendimento do cenário de forma aprofundada?"},
+    {key:"s1_prazo",p:"Realizaram as entregas da SPRINT no prazo?"},
+    {key:"s1_ia",p:"Usaram IA como assistente ao longo do processo?"},
+  ]},
+  {titulo:"Sprint 2 — Estruturar",perguntas:[
+    {key:"s2_metodologia",p:"Aplicaram metodologia de entendimento do problema?"},
+    {key:"s2_problema",p:"Definiram claramente o problema e a persona do público-alvo?"},
+    {key:"s2_hipoteses",p:"Apresentaram as primeiras hipóteses de solução?"},
+    {key:"s2_criterios",p:"Definiram os critérios de sucesso da solução?"},
+    {key:"s2_prazo",p:"Realizaram as entregas da SPRINT no prazo?"},
+    {key:"s2_ia",p:"Usaram IA como assistente ao longo do processo?"},
+  ],bloco_extra:{
+    titulo:"Arena Presencial Crivo SPRINTs 1 e 2",
+    perguntas:[
+      {key:"crivo_resultados",p:"Apresentaram os resultados das SPRINTs 1 e 2 com consistência e propriedade?"},
+      {key:"crivo_material",p:"Prepararam um material de qualidade para o pitch?"},
+      {key:"crivo_comunicacao",p:"Comunicaram-se de forma clara e influente nas apresentações?"},
+    ]
+  }},
+  {titulo:"Sprint 3 — Decidir e Construir",perguntas:[
+    {key:"s3_arquitetura",p:"Definiram claramente a arquitetura da solução?"},
+    {key:"s3_jornada",p:"Desenharam a jornada do cidadão?"},
+    {key:"s3_indicadores",p:"Definiram os indicadores de sucesso e métricas?"},
+    {key:"s3_equipe",p:"Definiram a estrutura da equipe do projeto?"},
+    {key:"s3_prazo",p:"Realizaram as entregas da SPRINT no prazo?"},
+    {key:"s3_ia",p:"Usaram IA como assistente ao longo do processo?"},
+  ]},
+  {titulo:"Sprint 4 — Defender",perguntas:[
+    {key:"s4_execucao",p:"Desenvolveram o plano de execução?"},
+    {key:"s4_orcamento",p:"Elaboraram orçamento de implantação?"},
+    {key:"s4_proposta",p:"Prepararam a proposta final de forma consistente e lógica?"},
+    {key:"s4_beneficios",p:"Definiram claramente os benefícios e o impacto da solução?"},
+    {key:"s4_prazo",p:"Realizaram as entregas da SPRINT no prazo?"},
+    {key:"s4_ia",p:"Usaram IA como assistente ao longo do processo?"},
+  ]},
+];
+
+const LABELS_DHO={presenca:"Presença",participacao:"Participação",papel:"Papel",entregas:"Entregas",colaboracao_dho:"Colaboração",comunicacao_dho:"Comunicação"};
+
 const SC={"1":"#FF5B1F","2":"#E8A020","3":"#5DCAA5","4":"#7B2FBE"};
 const SL={"1":"Nulo","2":"Baixo","3":"Bom","4":"Ótimo"};
 
@@ -262,12 +320,62 @@ function Diario(){
 
   async function analisar(){
     setStep("analisando");
-    const msgs=["Lendo a transcrição...","Cruzando com anotações manuais...","Avaliando competências...","Análise coletiva...","Gerando diário..."];
+    const msgs=tipo==="dho"
+      ?["Lendo a transcrição...","Cruzando com anotações manuais...","Avaliando engajamento individual...","Análise por sprint...","Gerando diário DHO..."]
+      :["Lendo a transcrição...","Cruzando com anotações manuais...","Avaliando competências...","Análise coletiva...","Gerando diário..."];
     let i=0;setLoadMsg(msgs[0]);
     const iv=setInterval(()=>{i++;if(i<msgs.length)setLoadMsg(msgs[i]);},2200);
     const aCtx=Object.entries(anot).filter(([,v])=>v.trim()).map(([n,v])=>`- ${n}: ${v}`).join("\n");
     const ausentes=todos.filter(n=>pres[n]===false).join(", ");
-    const prompt=`Você é avaliador especialista em desenvolvimento de liderança analisando ${tipo==="board"?"Mentoria com o Board":"Encontro DHO"} — Arena Ágora (${SPRINTS[si]}).
+
+    let prompt;
+    if(tipo==="dho"){
+      const sprintAtual=COLETIVA_DHO_SPRINTS[si];
+      const perguntasColetiva=[...sprintAtual.perguntas,...(sprintAtual.bloco_extra?.perguntas||[])];
+      const exemploColetivo=perguntasColetiva.map(p=>`"${p.key}":{"score":"3","obs":""}`).join(",");
+      const exemploCoord=CRITERIOS_DHO_COORD.map(c=>`"${c.key}":"3"`).join(",");
+      const exemploTech=CRITERIOS_DHO_TECH.map(c=>`"${c.key}":"3"`).join(",");
+      const listaPerguntasColetiva=perguntasColetiva.map(p=>`- ${p.key}: ${p.p}`).join("\n");
+
+      prompt=`Você é avaliador especialista em Desenvolvimento Humano e Organizacional (DHO) analisando um Encontro DHO online — Arena Ágora (${SPRINTS[si]}).
+Grupo: ${g.nome}
+Coordenadores: ${g.coordenadores.join(", ")}
+Tech Leads: ${g.techLeads.join(", ")}
+${ausentes?`Ausentes: ${ausentes}`:"Todos presentes"}
+
+LENTES DHO PARA ANÁLISE:
+- Engajamento e participação individual no grupo de trabalho
+- Maturidade comportamental e colaborativa
+- Evolução do grupo na sprint atual
+- Uso de IA como ferramenta de aprendizagem
+- Dinâmica de papéis e responsabilidades
+- Cumprimento de prazos e entregas
+
+ANOTAÇÕES MANUAIS:
+${aCtx||"Nenhuma."}
+
+TRANSCRIÇÃO:
+${trans||"(sem transcrição)"}
+
+PERGUNTAS DA AVALIAÇÃO COLETIVA (${sprintAtual.titulo}${sprintAtual.bloco_extra?" + "+sprintAtual.bloco_extra.titulo:""}):
+${listaPerguntasColetiva}
+
+CRITÉRIOS INDIVIDUAIS COORDENADORES (5): presenca, participacao, papel, entregas, colaboracao_dho
+CRITÉRIOS INDIVIDUAIS TECH LEADS (6): presenca, participacao, papel, entregas, colaboracao_dho, comunicacao_dho
+
+Gere JSON com este formato exato:
+{"resumo":"2-3 linhas sobre engajamento e dinâmica do grupo","destaques":["d1","d2","d3"],"atencao":["a1","a2"],"individuais":{"NOME_COORD":{"score_competencias":{${exemploCoord}},"obs":"obs comportamental 2 linhas"},"NOME_TECH":{"score_competencias":{${exemploTech}},"obs":"obs comportamental 2 linhas"}},"coletivo":{${exemploColetivo}}}
+
+REGRAS:
+- 1=Nulo 2=Baixo 3=Bom 4=Ótimo
+- Avalie apenas presentes
+- Use nomes exatos dos coordenadores e tech leads
+- Coordenadores usam 5 critérios (sem comunicacao_dho)
+- Tech Leads usam 6 critérios (com comunicacao_dho)
+- Foco em comportamento, engajamento, colaboração — NÃO em estratégia/viabilidade
+- APENAS JSON, sem comentários`;
+    }else{
+      prompt=`Você é avaliador especialista em desenvolvimento de liderança analisando Mentoria com o Board — Arena Ágora (${SPRINTS[si]}).
 Grupo: ${g.nome}
 Coordenadores: ${g.coordenadores.join(", ")}
 Tech Leads: ${g.techLeads.join(", ")}
@@ -279,12 +387,13 @@ ${trans||"(sem transcrição)"}
 Gere JSON:
 {"resumo":"2-3 linhas","destaques":["f1","f2","f3"],"atencao":["a1","a2"],"individuais":{"NOME":{"score_competencias":{"leitura_contexto":"3","pensamento_estrategico":"3","viabilidade":"2","governanca":"3","decisao":"3","comunicacao":"3","lideranca":"3"},"obs":"obs 2 linhas"}},"coletivo":{"leitura_contexto":{"score":"3","obs":""},"pensamento_estrategico":{"score":"3","obs":""},"viabilidade":{"score":"2","obs":""},"governanca":{"score":"2","obs":""},"decisao":{"score":"3","obs":""},"comunicacao":{"score":"3","obs":""},"colaboracao":{"score":"3","obs":""}}}
 1=Nulo 2=Baixo 3=Bom 4=Ótimo. Avalie apenas presentes. Nomes exatos. APENAS JSON.`;
+    }
 
     try{
       const r=await fetch("/api/chat",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:2000,messages:[{role:"user",content:prompt}]}),
+        body:JSON.stringify({max_tokens:tipo==="dho"?2500:2000,messages:[{role:"user",content:prompt}]}),
       });
       const data=await r.json();
       clearInterval(iv);
@@ -302,27 +411,45 @@ Gere JSON:
 
   function gerarTxt(){
     if(!res) return;
+    const isDHO=tipo==="dho";
+    const lbBoard={leitura_contexto:"Leitura",pensamento_estrategico:"Estratégia",viabilidade:"Viabilidade",governanca:"Governança",decisao:"Decisão",comunicacao:"Comunicação",lideranca:"Liderança",colaboracao:"Colaboração"};
+    const lbInd=isDHO?LABELS_DHO:lbBoard;
     const linhas=[
       `DIÁRIO DE BORDO — ARENA ÁGORA`,
-      `${g.nome} | ${SPRINTS[si]} | ${tipo==="board"?"Mentoria Board":"Encontro DHO"}`,
+      `${g.nome} | ${SPRINTS[si]} | ${isDHO?"Encontro DHO":"Mentoria Board"}`,
       new Date().toLocaleDateString("pt-BR"),"",
       "=== RESUMO ===",res.resumo||"","",
       "DESTAQUES:",...(res.destaques||[]).map(d=>"+ "+d),"",
       "PONTOS DE ATENÇÃO:",...(res.atencao||[]).map(a=>"! "+a),"",
       "=== AVALIAÇÃO INDIVIDUAL ===",
-      ...Object.entries(res.individuais||{}).flatMap(([n,d])=>[`\n${n}`,"Obs: "+(d.obs||""),...Object.entries(d.score_competencias||{}).map(([k,v])=>`  ${k}: ${v}`)]),
+      ...Object.entries(res.individuais||{}).flatMap(([n,d])=>[`\n${n}`,"Obs: "+(d.obs||""),...Object.entries(d.score_competencias||{}).map(([k,v])=>`  ${lbInd[k]||k}: ${v}`)]),
       "","=== AVALIAÇÃO COLETIVA ===",
-      ...CRITERIOS.map(b=>`${b.dim}: ${res.coletivo?.[b.key]?.score||"—"} | ${res.coletivo?.[b.key]?.obs||""}`),
-      "",obs?"OBSERVAÇÕES DO MENTOR:\n"+obs:"",
     ];
+    if(isDHO){
+      const sa=COLETIVA_DHO_SPRINTS[si];
+      const todosBlocos=[{titulo:sa.titulo,perguntas:sa.perguntas}];
+      if(sa.bloco_extra) todosBlocos.push(sa.bloco_extra);
+      todosBlocos.forEach(b=>{
+        linhas.push("",`-- ${b.titulo} --`);
+        b.perguntas.forEach(pq=>{
+          const col=res.coletivo?.[pq.key]||{};
+          linhas.push(`${pq.p} → ${col.score||"—"}${col.obs?" | "+col.obs:""}`);
+        });
+      });
+    }else{
+      CRITERIOS.forEach(b=>linhas.push(`${b.dim}: ${res.coletivo?.[b.key]?.score||"—"} | ${res.coletivo?.[b.key]?.obs||""}`));
+    }
+    linhas.push("",obs?"OBSERVAÇÕES DO MENTOR:\n"+obs:"");
     setExpTxt(linhas.join("\n"));setShowExp(true);
   }
 
   function gerarPDF(){
     if(!res) return;
+    const isDHO=tipo==="dho";
     const dataAtual=new Date().toLocaleDateString("pt-BR");
-    const tipoLabel=tipo==="board"?"Mentoria com o Board":"Encontro DHO";
-    const lb={leitura_contexto:"Leitura de contexto",pensamento_estrategico:"Pensamento estratégico",viabilidade:"Viabilidade",governanca:"Governança e execução",decisao:"Tomada de decisão",comunicacao:"Comunicação e influência",lideranca:"Liderança e colaboração",colaboracao:"Liderança e colaboração"};
+    const tipoLabel=isDHO?"Encontro DHO":"Mentoria com o Board";
+    const lbBoard={leitura_contexto:"Leitura de contexto",pensamento_estrategico:"Pensamento estratégico",viabilidade:"Viabilidade",governanca:"Governança e execução",decisao:"Tomada de decisão",comunicacao:"Comunicação e influência",lideranca:"Liderança e colaboração",colaboracao:"Liderança e colaboração"};
+    const lb=isDHO?LABELS_DHO:lbBoard;
     const scoreLabel={"1":"Nulo","2":"Baixo","3":"Bom","4":"Ótimo"};
     const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br/>");
     const individuaisHTML=Object.entries(res.individuais||{}).map(([nome,dados])=>{
@@ -330,7 +457,18 @@ Gere JSON:
       const scoresHTML=Object.entries(dados.score_competencias||{}).filter(([_,v])=>v&&v!=="—").map(([k,v])=>`<tr><td>${esc(lb[k]||k)}</td><td><strong>${esc(v)} · ${esc(scoreLabel[v]||"")}</strong></td></tr>`).join("");
       return `<div class="card-i"><h3>${esc(nome)}</h3><p class="role">${isC?"Coordenador(a)":"Tech Lead"}</p><table class="t-scores">${scoresHTML}</table>${dados.obs?`<p class="obs-i"><strong>Observação:</strong> ${esc(dados.obs)}</p>`:""}</div>`;
     }).join("");
-    const coletivoHTML=CRITERIOS.map(b=>{
+    const coletivoHTML=isDHO?(()=>{
+      const sa=COLETIVA_DHO_SPRINTS[si];
+      const blocos=[{titulo:sa.titulo,perguntas:sa.perguntas}];
+      if(sa.bloco_extra) blocos.push(sa.bloco_extra);
+      return blocos.map(bloco=>{
+        const rows=bloco.perguntas.map(pq=>{
+          const col=res.coletivo?.[pq.key]||{};
+          return `<tr><td>${esc(pq.p)}</td><td><strong>${esc(col.score||"—")} · ${esc(scoreLabel[col.score]||"")}</strong></td><td>${esc(col.obs||"")}</td></tr>`;
+        }).join("");
+        return `<h3 style="font-size:13px;color:#FF5B1F;margin:14px 0 6px;text-transform:uppercase;letter-spacing:0.5px;">${esc(bloco.titulo)}</h3><table class="t-coletivo">${rows}</table>`;
+      }).join("");
+    })():CRITERIOS.map(b=>{
       const col=res.coletivo?.[b.key]||{};
       return `<tr><td>${esc(b.dim)}</td><td><strong>${esc(col.score||"—")} · ${esc(scoreLabel[col.score]||"")}</strong></td><td>${esc(col.obs||"")}</td></tr>`;
     }).join("");
@@ -363,7 +501,7 @@ li{margin-bottom:4px;}
 ${destaquesHTML?`<h2>Destaques</h2><ul>${destaquesHTML}</ul>`:""}
 ${atencaoHTML?`<h2>Pontos de Atenção</h2><ul>${atencaoHTML}</ul>`:""}
 <h2>Avaliação Individual</h2>${individuaisHTML}
-<h2>Avaliação Coletiva — Lente Board</h2><table class="t-coletivo">${coletivoHTML}</table>
+<h2>Avaliação Coletiva — ${isDHO?"Lente DHO":"Lente Board"}</h2>${isDHO?coletivoHTML:`<table class="t-coletivo">${coletivoHTML}</table>`}
 ${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>`:""}
 <div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")} · Arena Ágora</div>
 </body></html>`;
@@ -535,7 +673,8 @@ ${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>
       {Object.entries(res.individuais||{}).map(([nome,dados])=>{
         const isC=g.coordenadores.includes(nome);
         const sc=dados.score_competencias||{};
-        const lb={leitura_contexto:"Leitura",pensamento_estrategico:"Estratégia",viabilidade:"Viabilidade",governanca:"Governança",decisao:"Decisão",comunicacao:"Comunicação",lideranca:"Liderança"};
+        const lbBoard={leitura_contexto:"Leitura",pensamento_estrategico:"Estratégia",viabilidade:"Viabilidade",governanca:"Governança",decisao:"Decisão",comunicacao:"Comunicação",lideranca:"Liderança",colaboracao:"Colaboração"};
+        const lb=tipo==="dho"?LABELS_DHO:lbBoard;
         return(
           <div key={nome} className="card">
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -558,9 +697,33 @@ ${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>
         );
       })}
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 12px"}}>
-        <div className="acl" style={{height:14,background:Z.mintDark}}/><p className="lbl" style={{margin:0}}>Avaliação coletiva — lente board</p>
+        <div className="acl" style={{height:14,background:Z.mintDark}}/><p className="lbl" style={{margin:0}}>Avaliação coletiva — {tipo==="dho"?`lente DHO · ${SPRINTS[si]}`:"lente board"}</p>
       </div>
-      {CRITERIOS.map(b=>{
+      {tipo==="dho"?(()=>{
+        const sprintAtual=COLETIVA_DHO_SPRINTS[si];
+        const todosBlocos=[{titulo:sprintAtual.titulo,perguntas:sprintAtual.perguntas}];
+        if(sprintAtual.bloco_extra) todosBlocos.push(sprintAtual.bloco_extra);
+        return todosBlocos.map((bloco,bidx)=>(
+          <div key={bidx} style={{marginBottom:bidx<todosBlocos.length-1?16:0}}>
+            {bidx>0&&<p style={{fontSize:11,fontWeight:600,color:Z.orange,letterSpacing:1,textTransform:"uppercase",margin:"16px 0 8px"}}>{bloco.titulo}</p>}
+            {bloco.perguntas.map(pq=>{
+              const col=res.coletivo?.[pq.key]||{};
+              const n=parseInt(col.score)||0;
+              const cor=SC[col.score]||Z.darkBorder;
+              return(
+                <div key={pq.key} className="card">
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8,gap:10}}>
+                    <p style={{fontWeight:500,fontSize:13,flex:1}}>{pq.p}</p>
+                    <SBadge v={col.score}/>
+                  </div>
+                  <div className="bwrap" style={{marginBottom:8}}><div className="bfill" style={{width:(n/4*100)+"%",background:cor}}/></div>
+                  <textarea className="tf tfsm" defaultValue={col.obs} placeholder="Adicionar observação..."/>
+                </div>
+              );
+            })}
+          </div>
+        ));
+      })():CRITERIOS.map(b=>{
         const col=res.coletivo?.[b.key]||{};
         const n=parseInt(col.score)||0;
         const cor=SC[col.score]||Z.darkBorder;
