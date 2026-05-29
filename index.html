@@ -300,7 +300,7 @@ Gere JSON:
     setSalvo(true);setTimeout(()=>setSalvo(false),3000);
   }
 
-  function gerarExp(){
+  function gerarTxt(){
     if(!res) return;
     const linhas=[
       `DIÁRIO DE BORDO — ARENA ÁGORA`,
@@ -316,6 +316,61 @@ Gere JSON:
       "",obs?"OBSERVAÇÕES DO MENTOR:\n"+obs:"",
     ];
     setExpTxt(linhas.join("\n"));setShowExp(true);
+  }
+
+  function gerarPDF(){
+    if(!res) return;
+    const dataAtual=new Date().toLocaleDateString("pt-BR");
+    const tipoLabel=tipo==="board"?"Mentoria com o Board":"Encontro DHO";
+    const lb={leitura_contexto:"Leitura de contexto",pensamento_estrategico:"Pensamento estratégico",viabilidade:"Viabilidade",governanca:"Governança e execução",decisao:"Tomada de decisão",comunicacao:"Comunicação e influência",lideranca:"Liderança e colaboração",colaboracao:"Liderança e colaboração"};
+    const scoreLabel={"1":"Nulo","2":"Baixo","3":"Bom","4":"Ótimo"};
+    const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br/>");
+    const individuaisHTML=Object.entries(res.individuais||{}).map(([nome,dados])=>{
+      const isC=g.coordenadores.includes(nome);
+      const scoresHTML=Object.entries(dados.score_competencias||{}).filter(([_,v])=>v&&v!=="—").map(([k,v])=>`<tr><td>${esc(lb[k]||k)}</td><td><strong>${esc(v)} · ${esc(scoreLabel[v]||"")}</strong></td></tr>`).join("");
+      return `<div class="card-i"><h3>${esc(nome)}</h3><p class="role">${isC?"Coordenador(a)":"Tech Lead"}</p><table class="t-scores">${scoresHTML}</table>${dados.obs?`<p class="obs-i"><strong>Observação:</strong> ${esc(dados.obs)}</p>`:""}</div>`;
+    }).join("");
+    const coletivoHTML=CRITERIOS.map(b=>{
+      const col=res.coletivo?.[b.key]||{};
+      return `<tr><td>${esc(b.dim)}</td><td><strong>${esc(col.score||"—")} · ${esc(scoreLabel[col.score]||"")}</strong></td><td>${esc(col.obs||"")}</td></tr>`;
+    }).join("");
+    const destaquesHTML=(res.destaques||[]).map(d=>`<li>${esc(d)}</li>`).join("");
+    const atencaoHTML=(res.atencao||[]).map(a=>`<li>${esc(a)}</li>`).join("");
+    const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Diario_${esc(g.nome.split("—")[1]?.trim()||g.nome)}_${esc(SPRINTS[si].split("—")[0].trim())}_${dataAtual.replace(/\//g,"-")}</title><style>
+body{font-family:system-ui,-apple-system,sans-serif;color:#222;line-height:1.6;padding:30px;max-width:800px;margin:0 auto;background:#fff;}
+h1{font-size:22px;color:#FF5B1F;border-bottom:2px solid #FF5B1F;padding-bottom:8px;margin-bottom:6px;}
+h2{font-size:15px;color:#333;margin-top:24px;margin-bottom:10px;border-left:3px solid #FF5B1F;padding-left:10px;text-transform:uppercase;letter-spacing:1px;}
+h3{font-size:14px;color:#222;margin-bottom:2px;}
+.meta{font-size:12px;color:#666;margin-bottom:20px;line-height:1.8;}
+.resumo{background:#f7f7f7;padding:14px 16px;border-radius:8px;font-size:13px;margin-bottom:20px;border-left:3px solid #5DCAA5;}
+.card-i{margin-bottom:16px;padding:14px;border:1px solid #ddd;border-radius:8px;page-break-inside:avoid;}
+.role{font-size:11px;color:#777;margin-bottom:10px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+table td{padding:6px 8px;border-bottom:1px solid #eee;vertical-align:top;}
+.t-scores td:first-child{width:55%;color:#555;}
+.t-coletivo td:first-child{width:35%;color:#555;font-weight:500;}
+.t-coletivo td:nth-child(2){width:18%;}
+ul{margin-left:22px;font-size:13px;margin-bottom:10px;}
+li{margin-bottom:4px;}
+.obs-i{font-size:12px;margin-top:8px;padding-top:8px;border-top:1px dashed #eee;color:#444;}
+.obs-mentor{background:#fff8e7;padding:14px 16px;border-radius:8px;border-left:3px solid #E8A020;margin-top:10px;font-size:13px;}
+.footer{margin-top:30px;padding-top:14px;border-top:1px solid #eee;font-size:10px;color:#999;text-align:center;}
+@media print{body{padding:15px;}h2{page-break-after:avoid;}.card-i{page-break-inside:avoid;}}
+</style></head><body>
+<h1>Diário de Bordo — Arena Ágora</h1>
+<p class="meta"><strong>${esc(g.nome)}</strong><br/>${esc(SPRINTS[si])} | ${esc(tipoLabel)}<br/>Data: ${dataAtual} &nbsp;|&nbsp; Mentor: ${esc(g.mentor)}</p>
+<h2>Resumo Geral</h2><div class="resumo">${esc(res.resumo||"")}</div>
+${destaquesHTML?`<h2>Destaques</h2><ul>${destaquesHTML}</ul>`:""}
+${atencaoHTML?`<h2>Pontos de Atenção</h2><ul>${atencaoHTML}</ul>`:""}
+<h2>Avaliação Individual</h2>${individuaisHTML}
+<h2>Avaliação Coletiva — Lente Board</h2><table class="t-coletivo">${coletivoHTML}</table>
+${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>`:""}
+<div class="footer">Gerado em ${new Date().toLocaleString("pt-BR")} · Arena Ágora</div>
+</body></html>`;
+    const w=window.open("","_blank");
+    if(!w){alert("Por favor, permita pop-ups neste site para gerar o PDF.");return;}
+    w.document.open();w.document.write(html);w.document.close();
+    setTimeout(()=>{try{w.focus();w.print();}catch(e){}},600);
   }
 
   if(step==="config") return(<>
@@ -451,9 +506,10 @@ Gere JSON:
       <button className="btn-g" onClick={reset}>Nova análise</button>
     </div>
     <div className="body">
-      <div style={{display:"flex",gap:10,marginBottom:16}}>
-        <button className="btn btn-m" style={{flex:1,padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo!":"Salvar no painel"}</button>
-        <button className="btn" style={{flex:1,padding:"11px 0",fontSize:13,background:Z.darkSurface,color:Z.textPrimary,border:`1px solid ${Z.darkBorder}`}} onClick={gerarExp}>Gerar relatório</button>
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        <button className="btn btn-m" style={{flex:"1 1 200px",padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo!":"Salvar no painel"}</button>
+        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:Z.darkSurface,color:Z.textPrimary,border:`1px solid ${Z.darkBorder}`}} onClick={gerarTxt}>📋 Gerar texto</button>
+        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:Z.orange,color:"#fff",border:"none"}} onClick={gerarPDF}>📄 Baixar PDF</button>
       </div>
       {salvo&&<div style={{background:Z.mintDark+"22",border:`1px solid ${Z.mintDark}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:Z.mintDark}}>✓ Dados salvos no painel consolidado.</div>}
       <div style={{background:`linear-gradient(135deg,${Z.darkCard} 0%,#1a1030 100%)`,border:`1px solid ${Z.violetStrong}40`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
