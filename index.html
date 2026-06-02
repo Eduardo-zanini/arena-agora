@@ -213,8 +213,22 @@ function Painel(){
     DB.keys().forEach(k=>{const v=DB.get(k);if(v)r[k.replace("diario:","")]=v;});
     setDados(r);
   },[]);
+  function getDados(g,s){
+    // Prioriza Board (70%), depois DHO, depois chave legada (compatibilidade)
+    return dados[`${g}:s${s}:board`]||dados[`${g}:s${s}`]||null;
+  }
+  function getDadosDHO(g,s){return dados[`${g}:s${s}:dho`]||null;}
   function media(g,s){
-    const d=dados[`${g}:s${s}`];
+    const dB=getDados(g,s);
+    const dD=getDadosDHO(g,s);
+    if(dB?.coletivo&&dD?.coletivo){
+      const mB=Object.values(dB.coletivo).map(c=>parseInt(c.score)||0).filter(v=>v>0);
+      const mD=Object.values(dD.coletivo).map(c=>parseInt(c.score)||0).filter(v=>v>0);
+      const avgB=mB.length?mB.reduce((a,b)=>a+b,0)/mB.length:0;
+      const avgD=mD.length?mD.reduce((a,b)=>a+b,0)/mD.length:0;
+      return(avgB*0.7+avgD*0.3).toFixed(1);
+    }
+    const d=dB||getDadosDHO(g,s);
     if(!d?.coletivo) return null;
     const vals=Object.values(d.coletivo).map(c=>parseInt(c.score)||0).filter(v=>v>0);
     if(!vals.length) return null;
@@ -235,13 +249,13 @@ function Painel(){
       </div>
       <div className="pgrid">
         {Object.keys(GRUPOS).map(g=>{
-          const d=dados[`${g}:s${si}`];
+          const d=getDados(g,si);
           const m=media(g,si);
           return(
             <div key={g} className="pcrd">
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                 <span style={{fontSize:13,fontWeight:600,color:Z.orange}}>{g}</span>
-                {m&&<span style={{fontSize:13,fontWeight:700,color:SC[String(Math.round(parseFloat(m)))]||Z.textSecondary}}>{m}</span>}
+                {m&&<span style={{fontSize:13,fontWeight:700,color:SC[String(Math.round(parseFloat(m)))]||Z.textSecondary}}>{m}{getDadosDHO(g,si)&&getDados(g,si)?" ★":""}</span>}
               </div>
               <p style={{fontSize:10,color:Z.textSecondary,marginBottom:8}}>{GRUPOS[g].nome.split("—")[1].trim()}</p>
               {d?(
@@ -276,7 +290,7 @@ function Painel(){
             <p style={{fontSize:12,color:Z.textPrimary,marginBottom:6,fontWeight:500}}>{b.dim}</p>
             <div style={{display:"flex",gap:8}}>
               {Object.keys(GRUPOS).map(g=>{
-                const d=dados[`${g}:s${si}`];
+                const d=getDados(g,si);
                 const s=d?.coletivo?.[b.key]?.score;
                 const n=parseInt(s)||0;
                 return(
@@ -310,13 +324,15 @@ function Diario(){
   const [showExp,setShowExp]=useState(false);
   const [expTxt,setExpTxt]=useState("");
   const [salvo,setSalvo]=useState(false);
+  const [fezTxt,setFezTxt]=useState(false);
+  const [fezPDF,setFezPDF]=useState(false);
 
   const g=GRUPOS[grupo];
   const todos=[...g.coordenadores,...g.techLeads];
   const presentes=todos.filter(n=>pres[n]!==false);
   const podeAn=presentes.length>0&&(trans.trim().length>30||Object.values(anot).some(v=>v.trim().length>5));
 
-  function reset(){setStep("config");setRes(null);setTrans("");setObs("");setPres({});setAnot({});setShowExp(false);}
+  function reset(){setStep("config");setRes(null);setTrans("");setObs("");setPres({});setAnot({});setShowExp(false);setFezTxt(false);setFezPDF(false);}
 
   async function analisar(){
     setStep("analisando");
@@ -405,8 +421,25 @@ Gere JSON:
 
   function salvar(){
     if(!res) return;
-    DB.set(`diario:${grupo}:s${si}`,{...res,grupo,sprint:si,tipo,obs,ts:Date.now()});
+    DB.set(`diario:${grupo}:s${si}:${tipo}`,{...res,grupo,sprint:si,tipo,obs,ts:Date.now()});
     setSalvo(true);setTimeout(()=>setSalvo(false),3000);
+  }
+
+  function calcularMedia(scoreObj){
+    const vals=Object.values(scoreObj||{}).map(v=>parseInt(v)).filter(v=>!isNaN(v)&&v>0);
+    if(!vals.length) return null;
+    return vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+
+  function notaPonderada(nome){
+    const dadosBoard=DB.get(`diario:${grupo}:s${si}:board`);
+    const dadosDHO=DB.get(`diario:${grupo}:s${si}:dho`);
+    const nBoard=dadosBoard?.individuais?.[nome]?calcularMedia(dadosBoard.individuais[nome].score_competencias):null;
+    const nDHO=dadosDHO?.individuais?.[nome]?calcularMedia(dadosDHO.individuais[nome].score_competencias):null;
+    if(nBoard!==null&&nDHO!==null) return{nota:(nBoard*0.7+nDHO*0.3).toFixed(2),temAmbos:true,nBoard:nBoard.toFixed(2),nDHO:nDHO.toFixed(2)};
+    if(nBoard!==null) return{nota:nBoard.toFixed(2),temAmbos:false,nBoard:nBoard.toFixed(2),nDHO:null};
+    if(nDHO!==null) return{nota:nDHO.toFixed(2),temAmbos:false,nBoard:null,nDHO:nDHO.toFixed(2)};
+    return null;
   }
 
   function gerarTxt(){
@@ -422,7 +455,15 @@ Gere JSON:
       "DESTAQUES:",...(res.destaques||[]).map(d=>"+ "+d),"",
       "PONTOS DE ATENÇÃO:",...(res.atencao||[]).map(a=>"! "+a),"",
       "=== AVALIAÇÃO INDIVIDUAL ===",
-      ...Object.entries(res.individuais||{}).flatMap(([n,d])=>[`\n${n}`,"Obs: "+(d.obs||""),...Object.entries(d.score_competencias||{}).map(([k,v])=>`  ${lbInd[k]||k}: ${v}`)]),
+      ...Object.entries(res.individuais||{}).flatMap(([n,d])=>{
+        const np=notaPonderada(n);
+        const linhasNota=np
+          ?np.temAmbos
+            ?[`  ► Nota final ponderada: ${np.nota} (Board ${np.nBoard}×70% + DHO ${np.nDHO}×30%)`]
+            :[`  ► Nota parcial (${np.nBoard?'Board':'DHO'} apenas): ${np.nota}`]
+          :[];
+        return[`\n${n}`,...linhasNota,"Obs: "+(d.obs||""),...Object.entries(d.score_competencias||{}).map(([k,v])=>`  ${lbInd[k]||k}: nota ${v}`)];
+      }),
       "","=== AVALIAÇÃO COLETIVA ===",
     ];
     if(isDHO){
@@ -433,14 +474,14 @@ Gere JSON:
         linhas.push("",`-- ${b.titulo} --`);
         b.perguntas.forEach(pq=>{
           const col=res.coletivo?.[pq.key]||{};
-          linhas.push(`${pq.p} → ${col.score||"—"}${col.obs?" | "+col.obs:""}`);
+          linhas.push(`${pq.p} → nota ${col.score||"—"}${col.obs?" | "+col.obs:""}`);
         });
       });
     }else{
-      CRITERIOS.forEach(b=>linhas.push(`${b.dim}: ${res.coletivo?.[b.key]?.score||"—"} | ${res.coletivo?.[b.key]?.obs||""}`));
+      CRITERIOS.forEach(b=>linhas.push(`${b.dim}: nota ${res.coletivo?.[b.key]?.score||"—"} | ${res.coletivo?.[b.key]?.obs||""}`));
     }
     linhas.push("",obs?"OBSERVAÇÕES DO MENTOR:\n"+obs:"");
-    setExpTxt(linhas.join("\n"));setShowExp(true);
+    setExpTxt(linhas.join("\n"));setShowExp(true);setFezTxt(true);
   }
 
   function gerarPDF(){
@@ -454,8 +495,22 @@ Gere JSON:
     const esc=s=>String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\n/g,"<br/>");
     const individuaisHTML=Object.entries(res.individuais||{}).map(([nome,dados])=>{
       const isC=g.coordenadores.includes(nome);
-      const scoresHTML=Object.entries(dados.score_competencias||{}).filter(([_,v])=>v&&v!=="—").map(([k,v])=>`<tr><td>${esc(lb[k]||k)}</td><td><strong>${esc(v)} · ${esc(scoreLabel[v]||"")}</strong></td></tr>`).join("");
-      return `<div class="card-i"><h3>${esc(nome)}</h3><p class="role">${isC?"Coordenador(a)":"Tech Lead"}</p><table class="t-scores">${scoresHTML}</table>${dados.obs?`<p class="obs-i"><strong>Observação:</strong> ${esc(dados.obs)}</p>`:""}</div>`;
+      const np=notaPonderada(nome);
+      const notaHTML=np
+        ?np.temAmbos
+          ?`<div style="margin-bottom:10px;padding:8px 12px;background:#f0faf5;border-radius:6px;border-left:3px solid #2a9d6a;">
+              <span style="font-size:11px;color:#2a9d6a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Nota Final Ponderada</span>
+              <span style="font-size:20px;font-weight:700;color:#2a9d6a;margin-left:10px;">${np.nota}</span>
+              <span style="font-size:11px;color:#666;margin-left:8px;">Board ${np.nBoard} × 70% + DHO ${np.nDHO} × 30%</span>
+            </div>`
+          :`<div style="margin-bottom:10px;padding:8px 12px;background:#f5f5f5;border-radius:6px;border-left:3px solid #aaa;">
+              <span style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Nota Parcial (${np.nBoard?'Board':'DHO'})</span>
+              <span style="font-size:20px;font-weight:700;color:#555;margin-left:10px;">${np.nota}</span>
+              <span style="font-size:11px;color:#999;margin-left:8px;">Aguardando análise ${np.nBoard?'DHO':'Board'} para nota ponderada</span>
+            </div>`
+        :"";
+      const scoresHTML=Object.entries(dados.score_competencias||{}).filter(([_,v])=>v&&v!=="—").map(([k,v])=>`<tr><td>${esc(lb[k]||k)}</td><td><strong>nota ${esc(v)} · ${esc(scoreLabel[v]||"")}</strong></td></tr>`).join("");
+      return `<div class="card-i">${notaHTML}<h3>${esc(nome)}</h3><p class="role">${isC?"Coordenador(a)":"Tech Lead"}</p><table class="t-scores">${scoresHTML}</table>${dados.obs?`<p class="obs-i"><strong>Observação:</strong> ${esc(dados.obs)}</p>`:""}</div>`;
     }).join("");
     const coletivoHTML=isDHO?(()=>{
       const sa=COLETIVA_DHO_SPRINTS[si];
@@ -509,6 +564,7 @@ ${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>
     if(!w){alert("Por favor, permita pop-ups neste site para gerar o PDF.");return;}
     w.document.open();w.document.write(html);w.document.close();
     setTimeout(()=>{try{w.focus();w.print();}catch(e){}},600);
+    setFezPDF(true);
   }
 
   if(step==="config") return(<>
@@ -644,11 +700,14 @@ ${obs?`<h2>Observações do Mentor</h2><div class="obs-mentor">${esc(obs)}</div>
       <button className="btn-g" onClick={reset}>Nova análise</button>
     </div>
     <div className="body">
-      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-        <button className="btn btn-m" style={{flex:"1 1 200px",padding:"11px 0",fontSize:13}} onClick={salvar}>{salvo?"✓ Salvo!":"Salvar no painel"}</button>
-        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:Z.darkSurface,color:Z.textPrimary,border:`1px solid ${Z.darkBorder}`}} onClick={gerarTxt}>📋 Gerar texto</button>
-        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:Z.orange,color:"#fff",border:"none"}} onClick={gerarPDF}>📄 Baixar PDF</button>
+      <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+        <button className="btn btn-m" style={{flex:"1 1 200px",padding:"11px 0",fontSize:13,opacity:(fezTxt&&fezPDF)?1:0.4,cursor:(fezTxt&&fezPDF)?"pointer":"not-allowed"}} onClick={salvar} disabled={!fezTxt||!fezPDF}>{salvo?"✓ Salvo!":"Salvar no painel"}</button>
+        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:fezTxt?Z.darkBorder:Z.darkSurface,color:fezTxt?Z.mintDark:Z.textPrimary,border:`1px solid ${fezTxt?Z.mintDark:Z.darkBorder}`}} onClick={gerarTxt}>{fezTxt?"✓ Texto gerado":"📋 Gerar texto"}</button>
+        <button className="btn" style={{flex:"1 1 140px",padding:"11px 0",fontSize:13,background:fezPDF?Z.darkBorder:Z.orange,color:fezPDF?Z.mintDark:"#fff",border:fezPDF?`1px solid ${Z.mintDark}`:"none"}} onClick={gerarPDF}>{fezPDF?"✓ PDF gerado":"📄 Baixar PDF"}</button>
       </div>
+      {(!fezTxt||!fezPDF)&&<p style={{fontSize:11,color:Z.textSecondary,marginBottom:12,textAlign:"center"}}>
+        {!fezTxt&&!fezPDF?"Gere o texto e o PDF antes de salvar":!fezTxt?"Gere o texto antes de salvar":"Baixe o PDF antes de salvar"}
+      </p>}
       {salvo&&<div style={{background:Z.mintDark+"22",border:`1px solid ${Z.mintDark}44`,borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:Z.mintDark}}>✓ Dados salvos no painel consolidado.</div>}
       <div style={{background:`linear-gradient(135deg,${Z.darkCard} 0%,#1a1030 100%)`,border:`1px solid ${Z.violetStrong}40`,borderRadius:12,padding:"16px 18px",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
