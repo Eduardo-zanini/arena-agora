@@ -6,18 +6,21 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  // 1. Validação da API key
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.error("ANTHROPIC_API_KEY nao configurada no Vercel");
     return res.status(500).json({ error: "Server misconfigured" });
   }
 
+  // 2. Modelo definido no backend
   const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
   try {
     const requestBody = {
       ...req.body,
       model: MODEL,
+      max_tokens: 8000, // Fixado em 8000 para suportar transcrições longas
     };
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -47,6 +50,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: e.message });
   }
 }
+
 export const config = {
   maxDuration: 60,
 };
