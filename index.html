@@ -409,14 +409,49 @@ Gere JSON:
       const r=await fetch("/api/chat",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({max_tokens:tipo==="dho"?2500:2000,messages:[{role:"user",content:prompt}]}),
+        body:JSON.stringify({max_tokens:tipo==="dho"?3500:3000,messages:[{role:"user",content:prompt}]}),
       });
       const data=await r.json();
       clearInterval(iv);
       const txt=data.content?.map(b=>b.text||"").join("")||"";
-      const parsed=JSON.parse(txt.replace(/```json|```/g,"").trim());
+
+      // Parser robusto com múltiplas tentativas de limpeza
+      let parsed=null;
+      const tentativas=[
+        ()=>JSON.parse(txt.replace(/```json|```/g,"").trim()),
+        ()=>JSON.parse(txt.replace(/```json|```/g,"").replace(/[\u0000-\u001F\u007F]/g," ").trim()),
+        ()=>{
+          const m=txt.match(/\{[\s\S]*\}/);
+          if(!m) throw new Error("JSON não encontrado");
+          return JSON.parse(m[0]);
+        },
+        ()=>{
+          const m=txt.match(/\{[\s\S]*\}/);
+          if(!m) throw new Error("JSON não encontrado");
+          return JSON.parse(m[0].replace(/[\u0000-\u001F\u007F]/g," ").replace(/,\s*([}\]])/g,"$1"));
+        },
+        ()=>{
+          // Tenta extrair e sanitizar o JSON mais agressivamente
+          const m=txt.match(/\{[\s\S]*\}/);
+          if(!m) throw new Error("JSON não encontrado");
+          const clean=m[0]
+            .replace(/[\u0000-\u001F\u007F]/g," ")
+            .replace(/,\s*([}\]])/g,"$1")
+            .replace(/([{,]\s*)(\w+)(\s*:)/g,'$1"$2"$3');
+          return JSON.parse(clean);
+        },
+      ];
+
+      for(const tentativa of tentativas){
+        try{parsed=tentativa();break;}catch(_){}
+      }
+
+      if(!parsed) throw new Error("Não foi possível interpretar a resposta da IA");
       setRes(parsed);setStep("resultado");
-    }catch(e){clearInterval(iv);setRes({erro:true});setStep("resultado");}
+    }catch(e){
+      console.error("Erro ao processar análise:",e.message);
+      clearInterval(iv);setRes({erro:true});setStep("resultado");
+    }
   }
 
   function salvar(){
